@@ -100,6 +100,8 @@ export interface IStudent extends Document {
   updatedAt: Date;
 }
 
+export type IStudentDocument = IStudent;
+
 const TermHistorySchema = new Schema<ITermHistory>(
   {
     term: { type: String, required: true },
@@ -252,4 +254,6 @@ const StudentSchema = new Schema<IStudent>(
 
 const Student =
   mongoose.models.Student || mongoose.model<IStudent>('Student', StudentSchema);
-export type IStudentDocument = IStudent;
+
+export { Student };
+export default Student;
