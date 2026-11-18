@@ -252,5 +252,4 @@ const StudentSchema = new Schema<IStudent>(
 
 const Student =
   mongoose.models.Student || mongoose.model<IStudent>('Student', StudentSchema);
-export { Student };
-export default Student;
+export type IStudentDocument = IStudent;
