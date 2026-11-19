@@ -8,11 +8,7 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#183263",
     "primaryColor": "#183263",
-    "splash": {
-      "image": "./assets/vtu-splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#183263"
-    },
+   
     "androidStatusBar": {
       "backgroundColor": "#183263",
       "barStyle": "light-content"
@@ -36,7 +32,8 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-sharing"
     ],
     "extra": {
       "eas": {
