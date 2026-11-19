@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "VTU E-Mentoring System",
+    "slug": "online-mentoring-system",
+    "version": "2.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/vtu-icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#183263",
+    "primaryColor": "#183263",
+    "splash": {
+      "image": "./assets/vtu-splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#183263"
+    },
+    "androidStatusBar": {
+      "backgroundColor": "#183263",
+      "barStyle": "light-content"
+    },
+    "android": {
+      "package": "com.vtu.onlinementoring",
+      "backgroundColor": "#183263",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/vtu-icon.png",
+        "backgroundColor": "#183263"
+      },
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      "expo-status-bar"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d393c143-fe06-4e4b-be15-8eb47fed8533"
+      }
+    }
+  }
+}
