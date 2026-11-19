@@ -707,7 +707,6 @@ export const getStudents = async (req: Request, res: Response) => {
     if (year && year !== 'ALL') {
       filter.admissionYear = year;
     }
-
     const students = await Student.find(filter).sort({ createdAt: -1 }).lean();
     return res.status(200).json(students || []);
   } catch (error: any) {
@@ -917,13 +916,11 @@ export const addBatchYear = async (req: Request, res: Response) => {
         .status(400)
         .json({ error: 'Please enter a valid 4-digit year (e.g. 2025 or 2027).' });
     }
-
     const config = await SystemConfig.findOneAndUpdate(
       {},
       { $addToSet: { activeBatches: rawYear } },
       { returnDocument: 'after', upsert: true }
     );
-
     return res.status(200).json({
       message: `Batch ${rawYear} created and activated.`,
       activeBatches: config.activeBatches,
@@ -934,7 +931,7 @@ export const addBatchYear = async (req: Request, res: Response) => {
 };
 
 // ============================================================================
-// 5. BATCH CANDIDATE PRE-ADMISSION (Strict Duplicate Email Validation + Email Dispatch)
+// 5. BATCH CANDIDATE PRE-ADMISSION (Strict Duplicate Email Validation + Email)
 // ============================================================================
 export const batchAdmitStudents = async (req: Request, res: Response) => {
   try {
@@ -1039,7 +1036,7 @@ export const batchAdmitStudents = async (req: Request, res: Response) => {
         riskLevel: 'Pending Evaluation',
       });
 
-      // Dispatch activation email directly to the newly created student's email
+      // Non-blocking Brevo email dispatch to the newly created student
       sendInstitutionalInvitation(
         cleanEmail,
         tempAdmissionNo,
@@ -1205,7 +1202,7 @@ export const approveUser = async (req: Request, res: Response) => {
       { upsert: true, returnDocument: 'after' }
     );
 
-    // Dispatch activation email to the newly approved student's personal email
+    // Non-blocking Brevo email dispatch to the newly approved student
     if (user.email) {
       sendInstitutionalInvitation(
         user.email,

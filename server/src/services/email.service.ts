@@ -54,39 +54,19 @@
 //     console.error('[Email Dispatch Error]:', error.message);
 //   }
 // };
-import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 
-dotenv.config(); // Ensures local .env variables are loaded immediately
+dotenv.config();
 
-const SMTP_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
-const SMTP_PORT = Number(process.env.EMAIL_PORT || 587);
-const SMTP_USER = process.env.EMAIL_USER || '';
-const SMTP_PASS = process.env.EMAIL_PASS || '';
-
-// Gmail SMTP requires the authenticated Gmail address in the 'from' field
-const SENDER_ADDRESS = SMTP_USER
-  ? `"VTU PG Centre Mentoring Desk" <${SMTP_USER}>`
-  : process.env.EMAIL_FROM || '"VTU PG Centre Mentoring Desk" <no-reply@vtu.ac.in>';
+const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
+const SENDER_EMAIL = process.env.EMAIL_USER || 'madeshnayak7712@gmail.com';
+const SENDER_NAME = 'VTU PG Centre Mentoring Desk';
 
 console.log(
-  '[Email Service Init] User loaded:',
-  SMTP_USER ? `YES (${SMTP_USER})` : 'NO (Undefined)'
+  '[Email Service Init] Brevo API Key loaded:',
+  BREVO_API_KEY ? 'YES' : 'NO (Undefined)'
 );
-console.log(
-  '[Email Service Init] Pass loaded:',
-  SMTP_PASS ? `YES (Length: ${SMTP_PASS.length})` : 'NO (Undefined)'
-);
-
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_PORT === 465, // true for 465, false for 587 (STARTTLS)
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS,
-  },
-});
+console.log('[Email Service Init] Sender Email:', SENDER_EMAIL);
 
 export const sendInstitutionalInvitation = async (
   toEmail: string,
@@ -102,9 +82,9 @@ export const sendInstitutionalInvitation = async (
       return false;
     }
 
-    if (!SMTP_USER || !SMTP_PASS) {
+    if (!BREVO_API_KEY) {
       console.warn(
-        '[Email Dispatch Skipped] EMAIL_USER or EMAIL_PASS is missing in environment.'
+        '[Email Dispatch Skipped] BREVO_API_KEY is missing in environment.'
       );
       return false;
     }
@@ -135,15 +115,33 @@ export const sendInstitutionalInvitation = async (
       </div>
     `;
 
-    const info = await transporter.sendMail({
-      from: SENDER_ADDRESS,
-      to: cleanRecipient,
-      subject: `VTU E-Mentoring Portal Activated — ${studentName} (${identifier})`,
-      html: htmlBody,
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'api-key': BREVO_API_KEY,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+        to: [{ email: cleanRecipient, name: studentName }],
+        subject: `VTU E-Mentoring Portal Activated — ${studentName} (${identifier})`,
+        htmlContent: htmlBody,
+      }),
     });
 
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(
+        `[Email Dispatch Error] Brevo API (${response.status}) for ${cleanRecipient}:`,
+        errText
+      );
+      return false;
+    }
+
+    const data: any = await response.json();
     console.log(
-      `[Institutional Invitation Dispatched] -> To: ${cleanRecipient} | Ref: ${identifier} | MessageId: ${info.messageId}`
+      `[Institutional Invitation Dispatched] -> To: ${cleanRecipient} | Ref: ${identifier} | MessageId: ${data.messageId}`
     );
     return true;
   } catch (error: any) {
