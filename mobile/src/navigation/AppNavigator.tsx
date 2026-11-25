@@ -9,23 +9,22 @@ import { VtuSessionLoader } from '../components/VtuSessionLoader';
 
 // Auth Screen
 import * as LoginScreenModule from '../screens/auth/LoginScreen';
-
 // Admin Screens
 import * as AdminHomeScreenModule from '../screens/admin/AdminHomeScreen';
 import * as BatchCreateScreenModule from '../screens/admin/BatchCreateScreen';
 import * as ConfigScreenModule from '../screens/admin/ConfigScreen';
 import * as ReportScreenModule from '../screens/admin/ReportScreen';
 import * as ApprovalsScreenModule from '../screens/admin/ApprovalsScreen';
-
 // Mentor Screens
 import * as MenteeListScreenModule from '../screens/mentor/MenteeListScreen';
 import * as TaskDeskScreenModule from '../screens/mentor/TaskDeskScreen';
+import * as MentorTaskDetailScreenModule from '../screens/mentor/MentorTaskDetailScreen';
 import * as MenteeDocsScreenModule from '../screens/mentor/MenteeDocsScreen';
 import * as MentorMoreScreenModule from '../screens/mentor/MentorMoreScreen';
-
 // Student Screens
 import * as StudentHomeScreenModule from '../screens/student/StudentHomeScreen';
 import * as StudentTasksScreenModule from '../screens/student/StudentTasksScreen';
+import * as StudentTaskDetailScreenModule from '../screens/student/StudentTaskDetailScreen';
 import * as DocumentUploadScreenModule from '../screens/student/DocumentUploadScreen';
 import * as InquiriesScreenModule from '../screens/student/InquiriesScreen';
 
@@ -41,12 +40,23 @@ const ApprovalsScreen = resolveScreen(ApprovalsScreenModule, 'ApprovalsScreen');
 
 const MenteeListScreen = resolveScreen(MenteeListScreenModule, 'MenteeListScreen');
 const TaskDeskScreen = resolveScreen(TaskDeskScreenModule, 'TaskDeskScreen');
+const MentorTaskDetailScreen = resolveScreen(
+  MentorTaskDetailScreenModule,
+  'MentorTaskDetailScreen'
+);
 const MenteeDocsScreen = resolveScreen(MenteeDocsScreenModule, 'MenteeDocsScreen');
 const MentorMoreScreen = resolveScreen(MentorMoreScreenModule, 'MentorMoreScreen');
 
 const StudentHomeScreen = resolveScreen(StudentHomeScreenModule, 'StudentHomeScreen');
 const StudentTasksScreen = resolveScreen(StudentTasksScreenModule, 'StudentTasksScreen');
-const DocumentUploadScreen = resolveScreen(DocumentUploadScreenModule, 'DocumentUploadScreen');
+const StudentTaskDetailScreen = resolveScreen(
+  StudentTaskDetailScreenModule,
+  'StudentTaskDetailScreen'
+);
+const DocumentUploadScreen = resolveScreen(
+  DocumentUploadScreenModule,
+  'DocumentUploadScreen'
+);
 const InquiriesScreen = resolveScreen(InquiriesScreenModule, 'InquiriesScreen');
 
 const Stack = createNativeStackNavigator();
@@ -65,7 +75,6 @@ const TabSvgIcon = ({
   activeBg?: string;
 }) => {
   const stroke = focused ? activeColor : '#8ba09d';
-
   return (
     <View style={[styles.iconPill, focused && { backgroundColor: activeBg }]}>
       <Svg
@@ -138,12 +147,14 @@ const TabSvgIcon = ({
 function AdminTabs() {
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 10);
-
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: [styles.floatingTabBar, { height: 60 + bottomPad, paddingBottom: bottomPad }],
+        tabBarStyle: [
+          styles.floatingTabBar,
+          { height: 60 + bottomPad, paddingBottom: bottomPad },
+        ],
         tabBarActiveTintColor: '#315fc4',
         tabBarInactiveTintColor: '#8ba09d',
         tabBarLabelStyle: styles.tabLabel,
@@ -191,12 +202,14 @@ function AdminTabs() {
 function MentorTabs() {
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 10);
-
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: [styles.floatingTabBar, { height: 60 + bottomPad, paddingBottom: bottomPad }],
+        tabBarStyle: [
+          styles.floatingTabBar,
+          { height: 60 + bottomPad, paddingBottom: bottomPad },
+        ],
         tabBarActiveTintColor: '#4f46e5',
         tabBarInactiveTintColor: '#8ba09d',
         tabBarLabelStyle: styles.tabLabel,
@@ -208,7 +221,12 @@ function MentorTabs() {
         options={{
           tabBarLabel: 'Mentees',
           tabBarIcon: ({ focused }) => (
-            <TabSvgIcon name="users" focused={focused} activeColor="#4f46e5" activeBg="#eef2ff" />
+            <TabSvgIcon
+              name="users"
+              focused={focused}
+              activeColor="#4f46e5"
+              activeBg="#eef2ff"
+            />
           ),
         }}
       />
@@ -218,7 +236,12 @@ function MentorTabs() {
         options={{
           tabBarLabel: 'Tasks',
           tabBarIcon: ({ focused }) => (
-            <TabSvgIcon name="tasks" focused={focused} activeColor="#4f46e5" activeBg="#eef2ff" />
+            <TabSvgIcon
+              name="tasks"
+              focused={focused}
+              activeColor="#4f46e5"
+              activeBg="#eef2ff"
+            />
           ),
         }}
       />
@@ -228,7 +251,12 @@ function MentorTabs() {
         options={{
           tabBarLabel: 'Docs',
           tabBarIcon: ({ focused }) => (
-            <TabSvgIcon name="folder" focused={focused} activeColor="#4f46e5" activeBg="#eef2ff" />
+            <TabSvgIcon
+              name="folder"
+              focused={focused}
+              activeColor="#4f46e5"
+              activeBg="#eef2ff"
+            />
           ),
         }}
       />
@@ -238,7 +266,12 @@ function MentorTabs() {
         options={{
           tabBarLabel: 'Eval',
           tabBarIcon: ({ focused }) => (
-            <TabSvgIcon name="sliders" focused={focused} activeColor="#4f46e5" activeBg="#eef2ff" />
+            <TabSvgIcon
+              name="sliders"
+              focused={focused}
+              activeColor="#4f46e5"
+              activeBg="#eef2ff"
+            />
           ),
         }}
       />
@@ -252,12 +285,14 @@ function MentorTabs() {
 function StudentTabs() {
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 10);
-
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: [styles.floatingTabBar, { height: 60 + bottomPad, paddingBottom: bottomPad }],
+        tabBarStyle: [
+          styles.floatingTabBar,
+          { height: 60 + bottomPad, paddingBottom: bottomPad },
+        ],
         tabBarActiveTintColor: '#315fc4',
         tabBarInactiveTintColor: '#8ba09d',
         tabBarLabelStyle: styles.tabLabel,
@@ -300,7 +335,7 @@ function StudentTabs() {
 }
 
 // ============================================================================
-// ROOT STACK NAVIGATOR (SINGLE-SHOT BOOT + SMOOTH SESSION LOADER)
+// ROOT STACK NAVIGATOR
 // ============================================================================
 export default function AppNavigator() {
   const { user, token, sessionTransitionText } = useAuthStore();
@@ -328,12 +363,17 @@ export default function AppNavigator() {
             <Stack.Screen name="Approvals" component={ApprovalsScreen} />
           </>
         ) : user?.role === 'mentor' ? (
-          <Stack.Screen name="MentorRoot" component={MentorTabs} />
+          <>
+            <Stack.Screen name="MentorRoot" component={MentorTabs} />
+            <Stack.Screen name="MentorTaskDetail" component={MentorTaskDetailScreen} />
+          </>
         ) : (
-          <Stack.Screen name="StudentRoot" component={StudentTabs} />
+          <>
+            <Stack.Screen name="StudentRoot" component={StudentTabs} />
+            <Stack.Screen name="StudentTaskDetail" component={StudentTaskDetailScreen} />
+          </>
         )}
       </Stack.Navigator>
-
       <VtuSessionLoader
         asModal
         visible={isBooting || Boolean(sessionTransitionText)}

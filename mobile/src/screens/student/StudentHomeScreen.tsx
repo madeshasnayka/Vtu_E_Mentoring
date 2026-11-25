@@ -18,6 +18,7 @@ export const StudentHomeScreen = () => {
   const { user, logout } = useAuthStore();
   const { students, config, syncFromDatabase } = useDataContext();
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedTerm, setSelectedTerm] = useState<string>('LATEST');
 
   useFocusEffect(
     useCallback(() => {
@@ -49,22 +50,34 @@ export const StudentHomeScreen = () => {
       : 'No Mentor';
 
   const history = Array.isArray(me?.history) ? me.history : [];
-  const hasEvaluations =
-    history.length > 0 &&
-    me?.currentMarks !== null &&
-    me?.currentMarks !== undefined;
+  const hasEvaluations = history.length > 0;
 
-  const marks = hasEvaluations ? Number(me!.currentMarks) : null;
-  const attend =
-    hasEvaluations && me?.currentAttendance !== null && me?.currentAttendance !== undefined
-      ? Number(me.currentAttendance)
+  const activeEntry = useMemo(() => {
+    if (!hasEvaluations) return null;
+    if (selectedTerm === 'LATEST') {
+      return history[history.length - 1];
+    }
+    return (
+      history.find((h) => h.term === selectedTerm) ||
+      history[history.length - 1]
+    );
+  }, [hasEvaluations, history, selectedTerm]);
+
+  const wM = config.wM ?? 0.6;
+  const wA = config.wA ?? 0.4;
+
+  const marks =
+    activeEntry !== null && activeEntry.marks !== undefined
+      ? Number(activeEntry.marks)
       : null;
-
+  const attend =
+    activeEntry !== null && activeEntry.attendance !== undefined
+      ? Number(activeEntry.attendance)
+      : null;
   const mastery =
     marks !== null && attend !== null
-      ? Number(((config.wM ?? 0.6) * marks + (config.wA ?? 0.4) * attend).toFixed(2))
+      ? Number((wM * marks + wA * attend).toFixed(2))
       : null;
-
   const isCompetent = mastery !== null && mastery >= 6.0;
 
   const velocity = useMemo(() => {
@@ -87,8 +100,9 @@ export const StudentHomeScreen = () => {
     const prev = history[history.length - 2];
     const curr = history[history.length - 1];
     const dM = Number((Number(curr.marks) - Number(prev.marks)).toFixed(1));
-    const dA = Number((Number(curr.attendance) - Number(prev.attendance)).toFixed(1));
-
+    const dA = Number(
+      (Number(curr.attendance) - Number(prev.attendance)).toFixed(1)
+    );
     return {
       marksText:
         dM > 0
@@ -147,6 +161,56 @@ export const StudentHomeScreen = () => {
           </View>
         </View>
 
+        {/* IA Term Selector Pills */}
+        {hasEvaluations && (
+          <View style={styles.termSelectorWrap}>
+            <Text style={styles.termSelectorLabel}>
+              VIEW ASSESSMENT TERM ({activeEntry?.term || 'Latest'})
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.termPillsRow}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.termPill,
+                  selectedTerm === 'LATEST' && styles.termPillActive,
+                ]}
+                onPress={() => setSelectedTerm('LATEST')}
+              >
+                <Text
+                  style={[
+                    styles.termPillText,
+                    selectedTerm === 'LATEST' && styles.termPillTextActive,
+                  ]}
+                >
+                  Latest ({history[history.length - 1]?.term})
+                </Text>
+              </TouchableOpacity>
+              {history.map((item) => {
+                const active = selectedTerm === item.term;
+                return (
+                  <TouchableOpacity
+                    key={item.term}
+                    style={[styles.termPill, active && styles.termPillActive]}
+                    onPress={() => setSelectedTerm(item.term)}
+                  >
+                    <Text
+                      style={[
+                        styles.termPillText,
+                        active && styles.termPillTextActive,
+                      ]}
+                    >
+                      {item.term}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* 2x2 Metrics Grid */}
         <View style={styles.metricsGrid}>
           <View style={styles.metricCard}>
@@ -156,7 +220,12 @@ export const StudentHomeScreen = () => {
                 {mastery.toFixed(2)}
               </Text>
             ) : (
-              <Text style={[styles.metricValue, { fontSize: 15, color: '#91a0b8', paddingVertical: 4 }]}>
+              <Text
+                style={[
+                  styles.metricValue,
+                  { fontSize: 15, color: '#91a0b8', paddingVertical: 4 },
+                ]}
+              >
                 Not Uploaded
               </Text>
             )}
@@ -171,11 +240,20 @@ export const StudentHomeScreen = () => {
                 <Text style={{ fontSize: 13, color: '#91a0b8' }}>/ 10</Text>
               </Text>
             ) : (
-              <Text style={[styles.metricValue, { fontSize: 15, color: '#91a0b8', paddingVertical: 4 }]}>
+              <Text
+                style={[
+                  styles.metricValue,
+                  { fontSize: 15, color: '#91a0b8', paddingVertical: 4 },
+                ]}
+              >
                 Not Uploaded
               </Text>
             )}
-            <Text style={styles.metricSub}>Cutoff Threshold: {config.thetaM}</Text>
+            <Text style={styles.metricSub}>
+              {activeEntry?.rawMarks
+                ? `Raw: ${activeEntry.rawMarks.obtained}/${activeEntry.rawMarks.total}`
+                : `Cutoff Threshold: ${config.thetaM}`}
+            </Text>
           </View>
 
           <View style={styles.metricCard}>
@@ -186,11 +264,20 @@ export const StudentHomeScreen = () => {
                 <Text style={{ fontSize: 13, color: '#91a0b8' }}>/ 10</Text>
               </Text>
             ) : (
-              <Text style={[styles.metricValue, { fontSize: 15, color: '#91a0b8', paddingVertical: 4 }]}>
+              <Text
+                style={[
+                  styles.metricValue,
+                  { fontSize: 15, color: '#91a0b8', paddingVertical: 4 },
+                ]}
+              >
                 Not Uploaded
               </Text>
             )}
-            <Text style={styles.metricSub}>Cutoff Threshold: {config.thetaA}</Text>
+            <Text style={styles.metricSub}>
+              {activeEntry?.rawAttendance
+                ? `Classes: ${activeEntry.rawAttendance.attended}/${activeEntry.rawAttendance.total}`
+                : `Cutoff Threshold: ${config.thetaA}`}
+            </Text>
           </View>
 
           <View style={styles.metricCard}>
@@ -210,10 +297,89 @@ export const StudentHomeScreen = () => {
                 },
               ]}
             >
-              {mastery === null ? 'Not Uploaded' : isCompetent ? 'Competent' : 'At Risk'}
+              {mastery === null
+                ? 'Not Uploaded'
+                : isCompetent
+                ? 'Competent'
+                : 'At Risk'}
             </Text>
             <Text style={styles.metricSub}>Dynamic Weighted Total</Text>
           </View>
+        </View>
+
+        {/* All Internal Assessments Breakdown Card */}
+        <View style={[styles.panelCard, { marginBottom: 16 }]}>
+          <View style={styles.panelTitleRow}>
+            <View style={styles.cardIconBadge}>
+              <Text style={styles.cardIconText}>IA</Text>
+            </View>
+            <Text style={styles.panelTitleText}>
+              All Internal Assessments ({history.length})
+            </Text>
+          </View>
+
+          {history.length === 0 ? (
+            <Text style={styles.panelSub}>
+              No IA marks or attendance have been uploaded by your mentor yet.
+            </Text>
+          ) : (
+            <View style={styles.iaTable}>
+              <View style={styles.iaHeaderRow}>
+                <Text style={[styles.iaHeaderCell, { flex: 1.1 }]}>TERM</Text>
+                <Text style={[styles.iaHeaderCell, { flex: 1, textAlign: 'center' }]}>
+                  MARKS
+                </Text>
+                <Text style={[styles.iaHeaderCell, { flex: 1, textAlign: 'center' }]}>
+                  ATTEND
+                </Text>
+                <Text style={[styles.iaHeaderCell, { flex: 0.9, textAlign: 'right' }]}>
+                  TOTAL
+                </Text>
+              </View>
+              {history.map((h, idx) => {
+                const mVal = Number(h.marks);
+                const aVal = Number(h.attendance);
+                const tot = Number((wM * mVal + wA * aVal).toFixed(2));
+                const safe = tot >= 6.0;
+                const isSelected = activeEntry?.term === h.term;
+                return (
+                  <TouchableOpacity
+                    key={`${h.term}-${idx}`}
+                    style={[
+                      styles.iaDataRow,
+                      isSelected && styles.iaDataRowSelected,
+                      idx === history.length - 1 && { borderBottomWidth: 0 },
+                    ]}
+                    onPress={() => setSelectedTerm(h.term)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={{ flex: 1.1 }}>
+                      <Text style={styles.iaTermText}>{h.term}</Text>
+                      {h.rawMarks && (
+                        <Text style={styles.iaRawSub}>
+                          {h.rawMarks.obtained}/{h.rawMarks.total}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={[styles.iaValCell, { flex: 1, textAlign: 'center' }]}>
+                      {mVal.toFixed(1)}/10
+                    </Text>
+                    <Text style={[styles.iaValCell, { flex: 1, textAlign: 'center' }]}>
+                      {aVal.toFixed(1)}/10
+                    </Text>
+                    <Text
+                      style={[
+                        styles.iaTotalCell,
+                        { flex: 0.9, textAlign: 'right', color: safe ? '#047857' : '#be123c' },
+                      ]}
+                    >
+                      {tot.toFixed(2)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Term Trajectory Velocity Card */}
@@ -286,7 +452,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#203f79',
     borderRadius: 18,
     padding: 19,
-    marginBottom: 16,
+    marginBottom: 14,
     elevation: 4,
   },
   spName: { fontSize: 18.5, fontWeight: '800', color: '#ffffff' },
@@ -303,6 +469,29 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.22)',
   },
   spBadgeText: { fontSize: 11, fontWeight: '700', color: '#ffffff' },
+  termSelectorWrap: { marginBottom: 14 },
+  termSelectorLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#5e6f8c',
+    letterSpacing: 0.6,
+    marginBottom: 7,
+  },
+  termPillsRow: { flexDirection: 'row', gap: 7 },
+  termPill: {
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#dce5f3',
+  },
+  termPillActive: {
+    backgroundColor: '#315fc4',
+    borderColor: '#315fc4',
+  },
+  termPillText: { fontSize: 11.5, fontWeight: '700', color: '#475569' },
+  termPillTextActive: { color: '#ffffff', fontWeight: '800' },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -360,9 +549,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardIconText: { fontSize: 13, fontWeight: '800', color: '#315fc4' },
+  cardIconText: { fontSize: 12, fontWeight: '800', color: '#315fc4' },
   panelTitleText: { fontSize: 14.5, fontWeight: '800', color: '#172b4d' },
   panelSub: { fontSize: 11.5, color: '#5e6f8c', marginBottom: 10 },
+  iaTable: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  iaHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  iaHeaderCell: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#5e6f8c',
+    letterSpacing: 0.4,
+  },
+  iaDataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#edf2fb',
+    backgroundColor: '#ffffff',
+  },
+  iaDataRowSelected: {
+    backgroundColor: '#f5f8ff',
+  },
+  iaTermText: { fontSize: 12.5, fontWeight: '800', color: '#172b4d' },
+  iaRawSub: { fontSize: 10, color: '#64748b', marginTop: 1 },
+  iaValCell: { fontSize: 12, fontWeight: '700', color: '#334155' },
+  iaTotalCell: { fontSize: 12.5, fontWeight: '800' },
   velocityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

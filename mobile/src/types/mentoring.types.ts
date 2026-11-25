@@ -9,13 +9,35 @@ export interface IStudentEntity {
   analysis?: IDiagnosticResult;
 }
 
+export interface ITaskAttachment {
+  fileName: string;
+  fileUrl: string;
+  fileId?: string;
+  mimeType: string;
+  fileSize?: string;
+}
+
+export interface ITaskSubmission {
+  remarks?: string;
+  submittedAt?: string;
+  fileName?: string;
+  fileUrl?: string;
+  fileId?: string;
+  mimeType?: string;
+  fileSize?: string;
+}
+
 export interface IActionTask {
   id: string;
   studentId: string;
+  mentorId?: string;
   title: string;
+  description?: string;
   priority: 'High' | 'Medium' | 'Low';
   dueDate: string;
   status: 'Pending' | 'In Progress' | 'Completed';
+  referenceFile?: ITaskAttachment | null;
+  submission?: ITaskSubmission | null;
 }
 
 export interface IGuidanceQuery {
@@ -31,15 +53,19 @@ export interface IDocumentRecord {
   id: string;
   studentId: string;
   studentName: string;
-  category: 'Marks Card' | 'Attendance / Medical Proof' | 'Profile & Bio-Data' | 'Project Draft';
+  category:
+    | 'Marks Card'
+    | 'Attendance / Medical Proof'
+    | 'Profile & Bio-Data'
+    | 'Project Draft';
   title: string;
   fileName: string;
   fileSize: string;
   date: string;
   verified: boolean;
   notes?: string;
-  fileUri?: string;   // <--- Device file path
-  mimeType?: string;  // <--- 'image/jpeg', 'application/pdf', etc.
+  fileUri?: string;
+  mimeType?: string;
 }
 
 export interface IPendingRegistration {

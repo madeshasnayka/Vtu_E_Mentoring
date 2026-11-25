@@ -2,15 +2,24 @@ export interface IAssessmentEntry {
   term: string; // e.g. "IA-1", "IA-2", "IA-3"
   marks: number; // 0.0 - 10.0
   attendance: number; // 0.0 - 10.0
+  rawMarks?: {
+    obtained: number;
+    total: number;
+  };
+  rawAttendance?: {
+    attended: number;
+    total: number;
+  };
+  date?: string;
   recordedAt?: string;
 }
 
 export interface ISystemConfig {
-  thetaM: number;       // Passing Marks Threshold (e.g., 5.0)
-  thetaA: number;       // Mandatory Attendance Cutoff (e.g., 7.5 / 75%)
-  wM: number;           // Academic Mastery Weight (e.g., 0.6)
-  wA: number;           // Attendance Weight (e.g., 0.4)
-  dropDelta: number;    // Velocity Drop Trigger Delta (e.g., -1.5)
+  thetaM: number; // Passing Marks Threshold (e.g., 5.0)
+  thetaA: number; // Mandatory Attendance Cutoff (e.g., 7.5 / 75%)
+  wM: number; // Academic Mastery Weight (e.g., 0.6)
+  wA: number; // Attendance Weight (e.g., 0.4)
+  dropDelta: number; // Velocity Drop Trigger Delta (e.g., -1.5)
 }
 
 export type DiagnosticProfile =

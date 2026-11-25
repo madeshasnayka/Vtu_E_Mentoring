@@ -48,6 +48,13 @@ export interface ICandidateAdmitPayload {
   mentorId?: string;
 }
 
+export interface IPickedFile {
+  uri: string;
+  name: string;
+  mimeType?: string;
+  size?: number;
+}
+
 interface DataState {
   config: ISystemConfig;
   batchYears: string[];
@@ -56,10 +63,12 @@ interface DataState {
   documents: any[];
   tasks: IActionTask[];
   queries: IGuidanceQuery[];
-  pendingRegistrations: (IPendingRegistration & { admissionYear?: string; mentorId?: string })[];
+  pendingRegistrations: (IPendingRegistration & {
+    admissionYear?: string;
+    mentorId?: string;
+  })[];
   selectedBatchYear: string;
   isLoading: boolean;
-
   setSelectedBatchYear: (year: string) => void;
   addCustomBatchYear: (year: string) => Promise<void>;
   createMentor: (payload: {
@@ -70,7 +79,10 @@ interface DataState {
     password?: string;
   }) => Promise<void>;
   reallotStudents: (mentorId: string, studentIds: string[]) => Promise<void>;
-  syncFromDatabase: (role: 'admin' | 'mentor' | 'student', yearFilter?: string) => Promise<void>;
+  syncFromDatabase: (
+    role: 'admin' | 'mentor' | 'student',
+    yearFilter?: string
+  ) => Promise<void>;
   recordStudentEvaluation: (payload: IEvaluationPayload) => Promise<void>;
   batchAdmitCandidates: (
     candidates: ICandidateAdmitPayload[],
@@ -89,28 +101,52 @@ interface DataState {
     description?: string;
     priority: string;
     dueDate: string;
+    file?: IPickedFile | null;
   }) => Promise<void>;
+  submitTaskProof: (
+    taskId: string,
+    payload: { remarks?: string; file?: IPickedFile | null }
+  ) => Promise<void>;
   toggleTaskStatus: (taskId: string) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
   addQuery: (query: { subject: string; message: string }) => Promise<void>;
   replyQuery: (queryId: string, reply: string) => Promise<void>;
   deleteQuery: (queryId: string) => Promise<void>;
-  approveRegistration: (userId: string, mentorId?: string, admissionYear?: string) => Promise<void>;
+  approveRegistration: (
+    userId: string,
+    mentorId?: string,
+    admissionYear?: string
+  ) => Promise<void>;
   rejectRegistration: (userId: string) => Promise<void>;
 }
-const mapStudentRecord = (s: any, mentorMap?: Map<string, string>): IStudentWithMentor => {
+
+const mapTaskRecord = (t: any): IActionTask => ({
+  id: t._id || t.id,
+  studentId: t.studentId,
+  mentorId: t.mentorId || '',
+  title: t.title,
+  description: t.description || '',
+  priority: t.priority || 'Medium',
+  dueDate: t.dueDate || 'Next Session',
+  status: t.status || 'Pending',
+  referenceFile: t.referenceFile || null,
+  submission: t.submission || null,
+});
+
+const mapStudentRecord = (
+  s: any,
+  mentorMap?: Map<string, string>
+): IStudentWithMentor => {
   const rawMentorId = String(s.mentorId ?? '').trim();
   const isUnassigned =
     !rawMentorId ||
     rawMentorId.toUpperCase() === 'UNASSIGNED' ||
     rawMentorId.toUpperCase() === 'NONE';
   const mId = isUnassigned ? '' : rawMentorId;
-
   const history = Array.isArray(s.history) ? s.history : [];
   const hasEvaluations = history.length > 0;
   const lastHist = hasEvaluations ? history[history.length - 1] : null;
 
-  // Only show marks & attendance if the mentor has actually recorded an evaluation in history
   const rawMarks =
     hasEvaluations && lastHist?.marks !== undefined && lastHist?.marks !== null
       ? Number(lastHist.marks)
@@ -119,9 +155,13 @@ const mapStudentRecord = (s: any, mentorMap?: Map<string, string>): IStudentWith
       : null;
 
   const rawAttend =
-    hasEvaluations && lastHist?.attendance !== undefined && lastHist?.attendance !== null
+    hasEvaluations &&
+    lastHist?.attendance !== undefined &&
+    lastHist?.attendance !== null
       ? Number(lastHist.attendance)
-      : hasEvaluations && s.currentAttendance !== undefined && s.currentAttendance !== null
+      : hasEvaluations &&
+        s.currentAttendance !== undefined &&
+        s.currentAttendance !== null
       ? Number(s.currentAttendance)
       : null;
 
@@ -134,7 +174,11 @@ const mapStudentRecord = (s: any, mentorMap?: Map<string, string>): IStudentWith
     ? 'No Mentor'
     : (mentorMap ? mentorMap.get(mId.toLowerCase()) : undefined) ||
       s.mentorName ||
-      (mId === '0001' ? 'Dr. Kumar P K' : mId === '1' ? 'Maddy' : `Faculty (${mId})`);
+      (mId === '0001'
+        ? 'Dr. Kumar P K'
+        : mId === '1'
+        ? 'Maddy'
+        : `Faculty (${mId})`);
 
   return {
     id: s.usn || s.id,
@@ -148,7 +192,8 @@ const mapStudentRecord = (s: any, mentorMap?: Map<string, string>): IStudentWith
     remarks: s.remarks || '',
     history,
     currentMarks: rawMarks !== null && !isNaN(rawMarks) ? rawMarks : null,
-    currentAttendance: rawAttend !== null && !isNaN(rawAttend) ? rawAttend : null,
+    currentAttendance:
+      rawAttend !== null && !isNaN(rawAttend) ? rawAttend : null,
     dynamicTotal: rawTotal !== null && !isNaN(rawTotal) ? rawTotal : null,
     riskLevel: hasEvaluations ? s.riskLevel || 'Satisfactory' : 'Not Evaluated',
     isApproved: s.isApproved === true,
@@ -179,12 +224,17 @@ export const useDataContext = create<DataState>((set, get) => ({
   addCustomBatchYear: async (year: string) => {
     const cleanYear = String(year || '').trim();
     if (!/^\d{4}$/.test(cleanYear)) {
-      Alert.alert('Invalid Year', 'Please enter a valid 4-digit year (e.g. 2025 or 2027).');
+      Alert.alert(
+        'Invalid Year',
+        'Please enter a valid 4-digit year (e.g. 2025 or 2027).'
+      );
       return;
     }
     const existing = get().batchYears;
     if (!existing.includes(cleanYear)) {
-      const nextYears = [...existing, cleanYear].sort((a, b) => Number(b) - Number(a));
+      const nextYears = [...existing, cleanYear].sort(
+        (a, b) => Number(b) - Number(a)
+      );
       set({ batchYears: nextYears });
     }
     try {
@@ -203,10 +253,16 @@ export const useDataContext = create<DataState>((set, get) => ({
         designation,
         password: password || 'password123',
       });
-      Alert.alert('Mentor Created', res.data?.message || `Faculty Mentor ${name} created.`);
+      Alert.alert(
+        'Mentor Created',
+        res.data?.message || `Faculty Mentor ${name} created.`
+      );
       await get().syncFromDatabase('admin');
     } catch (error: any) {
-      const msg = error.response?.data?.error || error.message || 'Failed to create mentor.';
+      const msg =
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to create mentor.';
       Alert.alert('Creation Error', msg);
       throw new Error(msg);
     }
@@ -231,7 +287,9 @@ export const useDataContext = create<DataState>((set, get) => ({
         studentIds,
       });
 
-      const idSet = new Set(studentIds.map((id) => String(id).trim().toUpperCase()));
+      const idSet = new Set(
+        studentIds.map((id) => String(id).trim().toUpperCase())
+      );
       set((state) => ({
         students: state.students.map((s) => {
           const matchUsn = idSet.has(String(s.id).trim().toUpperCase());
@@ -247,10 +305,16 @@ export const useDataContext = create<DataState>((set, get) => ({
         }),
       }));
 
-      Alert.alert('Scholars Re-Allotted', res.data?.message || 'Transfer completed.');
+      Alert.alert(
+        'Scholars Re-Allotted',
+        res.data?.message || 'Transfer completed.'
+      );
       await get().syncFromDatabase('admin');
     } catch (error: any) {
-      const msg = error.response?.data?.error || error.message || 'Failed to re-allot scholars.';
+      const msg =
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to re-allot scholars.';
       Alert.alert('Transfer Error', msg);
       throw new Error(msg);
     }
@@ -259,22 +323,29 @@ export const useDataContext = create<DataState>((set, get) => ({
   syncFromDatabase: async (role, yearFilter) => {
     const targetYear = yearFilter || get().selectedBatchYear;
     set({ isLoading: true });
-
     try {
-      const serverBase = (apiClient.defaults.baseURL || '').replace('/api/v1', '');
+      const serverBase = (apiClient.defaults.baseURL || '').replace(
+        '/api/v1',
+        ''
+      );
       const currentMentorId = String(
         useAuthStore.getState().user?.identifier || ''
       ).trim();
 
       if (role === 'admin') {
         const yearParam =
-          targetYear && targetYear !== 'ALL' ? { params: { year: targetYear } } : {};
-        const [mentorsRes, studentsRes, approvalsRes, configRes] = await Promise.all([
-          apiClient.get('/admin/mentors').catch(() => ({ data: [] })),
-          apiClient.get('/admin/students', yearParam).catch(() => ({ data: [] })),
-          apiClient.get('/admin/approvals').catch(() => ({ data: [] })),
-          apiClient.get('/admin/config').catch(() => ({ data: null })),
-        ]);
+          targetYear && targetYear !== 'ALL'
+            ? { params: { year: targetYear } }
+            : {};
+        const [mentorsRes, studentsRes, approvalsRes, configRes] =
+          await Promise.all([
+            apiClient.get('/admin/mentors').catch(() => ({ data: [] })),
+            apiClient
+              .get('/admin/students', yearParam)
+              .catch(() => ({ data: [] })),
+            apiClient.get('/admin/approvals').catch(() => ({ data: [] })),
+            apiClient.get('/admin/config').catch(() => ({ data: null })),
+          ]);
 
         const rawMentors = Array.isArray(mentorsRes.data)
           ? mentorsRes.data
@@ -286,20 +357,23 @@ export const useDataContext = create<DataState>((set, get) => ({
           designation: m.designation || 'Faculty Mentor',
           menteeCount: m.menteeCount || 0,
         }));
-
-        const mentorMap = new Map(mentorsList.map((m) => [m.id.toLowerCase(), m.name]));
+        const mentorMap = new Map(
+          mentorsList.map((m) => [m.id.toLowerCase(), m.name])
+        );
         const rawStudents = Array.isArray(studentsRes.data)
           ? studentsRes.data
           : studentsRes.data?.students || [];
         const rawApprovals = Array.isArray(approvalsRes.data)
           ? approvalsRes.data
           : approvalsRes.data?.approvals || approvalsRes.data?.users || [];
-        const resolvedConfig = configRes.data?.config || configRes.data || get().config;
+        const resolvedConfig =
+          configRes.data?.config || configRes.data || get().config;
 
         const discoveredYears = new Set<string>(['2026', ...get().batchYears]);
         if (Array.isArray(resolvedConfig?.activeBatches)) {
           resolvedConfig.activeBatches.forEach((yr: string) => {
-            if (yr && /^\d{4}$/.test(String(yr))) discoveredYears.add(String(yr));
+            if (yr && /^\d{4}$/.test(String(yr)))
+              discoveredYears.add(String(yr));
           });
         }
         rawStudents.forEach((s: any) => {
@@ -309,7 +383,9 @@ export const useDataContext = create<DataState>((set, get) => ({
         });
 
         set({
-          batchYears: Array.from(discoveredYears).sort((a, b) => Number(b) - Number(a)),
+          batchYears: Array.from(discoveredYears).sort(
+            (a, b) => Number(b) - Number(a)
+          ),
           mentors: mentorsList,
           students: rawStudents.map((s: any) => mapStudentRecord(s, mentorMap)),
           pendingRegistrations: rawApprovals.map((u: any) => ({
@@ -338,23 +414,35 @@ export const useDataContext = create<DataState>((set, get) => ({
         if (targetYear && targetYear !== 'ALL') mentorParams.year = targetYear;
 
         const [menteesRes, docsRes, tasksRes, queriesRes] = await Promise.all([
-          apiClient.get('/mentor/mentees', { params: mentorParams }).catch(() => ({ data: [] })),
-          apiClient.get('/mentor/documents', { params: mentorParams }).catch(() => ({ data: [] })),
-          apiClient.get('/mentor/tasks', { params: mentorParams }).catch(() => ({ data: [] })),
-          apiClient.get('/mentor/inquiries', { params: mentorParams }).catch(() => ({ data: [] })),
+          apiClient
+            .get('/mentor/mentees', { params: mentorParams })
+            .catch(() => ({ data: [] })),
+          apiClient
+            .get('/mentor/documents', { params: mentorParams })
+            .catch(() => ({ data: [] })),
+          apiClient
+            .get('/mentor/tasks', { params: mentorParams })
+            .catch(() => ({ data: [] })),
+          apiClient
+            .get('/mentor/inquiries', { params: mentorParams })
+            .catch(() => ({ data: [] })),
         ]);
 
         const rawMentees = Array.isArray(menteesRes.data)
           ? menteesRes.data
           : menteesRes.data?.students || menteesRes.data?.mentees || [];
-        const rawDocs = Array.isArray(docsRes.data) ? docsRes.data : docsRes.data?.documents || [];
-        const rawTasks = Array.isArray(tasksRes.data) ? tasksRes.data : tasksRes.data?.tasks || [];
+        const rawDocs = Array.isArray(docsRes.data)
+          ? docsRes.data
+          : docsRes.data?.documents || [];
+        const rawTasks = Array.isArray(tasksRes.data)
+          ? tasksRes.data
+          : tasksRes.data?.tasks || [];
         const rawQueries = Array.isArray(queriesRes.data)
           ? queriesRes.data
           : queriesRes.data?.queries || queriesRes.data?.inquiries || [];
 
-        const allMappedMentees: IStudentWithMentor[] = rawMentees.map((s: any) =>
-          mapStudentRecord(s)
+        const allMappedMentees: IStudentWithMentor[] = rawMentees.map(
+          (s: any) => mapStudentRecord(s)
         );
         const myMentees: IStudentWithMentor[] = currentMentorId
           ? allMappedMentees.filter(
@@ -363,7 +451,6 @@ export const useDataContext = create<DataState>((set, get) => ({
                 currentMentorId.toLowerCase()
             )
           : allMappedMentees;
-
         const myMenteeUsnSet = new Set<string>(
           myMentees.map((s: IStudentWithMentor) =>
             String(s.id || '').trim().toUpperCase()
@@ -378,11 +465,15 @@ export const useDataContext = create<DataState>((set, get) => ({
         });
 
         set({
-          batchYears: Array.from(discoveredYears).sort((a, b) => Number(b) - Number(a)),
+          batchYears: Array.from(discoveredYears).sort(
+            (a, b) => Number(b) - Number(a)
+          ),
           students: myMentees,
           documents: rawDocs
             .filter((d: any) =>
-              myMenteeUsnSet.has(String(d.studentId || '').trim().toUpperCase())
+              myMenteeUsnSet.has(
+                String(d.studentId || '').trim().toUpperCase()
+              )
             )
             .map((d: any) => {
               const rawUrl = d.fileUrl || '';
@@ -414,19 +505,16 @@ export const useDataContext = create<DataState>((set, get) => ({
             }),
           tasks: rawTasks
             .filter((t: any) =>
-              myMenteeUsnSet.has(String(t.studentId || '').trim().toUpperCase())
+              myMenteeUsnSet.has(
+                String(t.studentId || '').trim().toUpperCase()
+              )
             )
-            .map((t: any) => ({
-              id: t._id || t.id,
-              studentId: t.studentId,
-              title: t.title,
-              priority: t.priority || 'Medium',
-              dueDate: t.dueDate || 'Next Session',
-              status: t.status || 'Pending',
-            })),
+            .map(mapTaskRecord),
           queries: rawQueries
             .filter((q: any) =>
-              myMenteeUsnSet.has(String(q.studentId || '').trim().toUpperCase())
+              myMenteeUsnSet.has(
+                String(q.studentId || '').trim().toUpperCase()
+              )
             )
             .map((q: any) => ({
               id: q._id || q.id,
@@ -438,16 +526,21 @@ export const useDataContext = create<DataState>((set, get) => ({
             })),
         });
       } else if (role === 'student') {
-        const [profileRes, docsRes, tasksRes, inquiriesRes] = await Promise.all([
-          apiClient.get('/student/profile').catch(() => ({ data: null })),
-          apiClient.get('/student/documents').catch(() => ({ data: [] })),
-          apiClient.get('/student/tasks').catch(() => ({ data: [] })),
-          apiClient.get('/student/inquiries').catch(() => ({ data: [] })),
-        ]);
+        const [profileRes, docsRes, tasksRes, inquiriesRes] =
+          await Promise.all([
+            apiClient.get('/student/profile').catch(() => ({ data: null })),
+            apiClient.get('/student/documents').catch(() => ({ data: [] })),
+            apiClient.get('/student/tasks').catch(() => ({ data: [] })),
+            apiClient.get('/student/inquiries').catch(() => ({ data: [] })),
+          ]);
 
         const rawProfile = profileRes.data?.student || profileRes.data;
-        const rawDocs = Array.isArray(docsRes.data) ? docsRes.data : docsRes.data?.documents || [];
-        const rawTasks = Array.isArray(tasksRes.data) ? tasksRes.data : tasksRes.data?.tasks || [];
+        const rawDocs = Array.isArray(docsRes.data)
+          ? docsRes.data
+          : docsRes.data?.documents || [];
+        const rawTasks = Array.isArray(tasksRes.data)
+          ? tasksRes.data
+          : tasksRes.data?.tasks || [];
         const rawQueries = Array.isArray(inquiriesRes.data)
           ? inquiriesRes.data
           : inquiriesRes.data?.queries || inquiriesRes.data?.inquiries || [];
@@ -487,14 +580,7 @@ export const useDataContext = create<DataState>((set, get) => ({
                 : undefined,
             };
           }),
-          tasks: rawTasks.map((t: any) => ({
-            id: t._id || t.id,
-            studentId: t.studentId,
-            title: t.title,
-            priority: t.priority || 'Medium',
-            dueDate: t.dueDate || 'Next Session',
-            status: t.status || 'Pending',
-          })),
+          tasks: rawTasks.map(mapTaskRecord),
           queries: rawQueries.map((q: any) => ({
             id: q._id || q.id,
             studentId: q.studentId,
@@ -512,14 +598,21 @@ export const useDataContext = create<DataState>((set, get) => ({
     }
   },
 
-  batchAdmitCandidates: async (candidates, admissionYear, defaultMentorId = '0001') => {
+  batchAdmitCandidates: async (
+    candidates,
+    admissionYear,
+    defaultMentorId = '0001'
+  ) => {
     try {
       const res = await apiClient.post('/admin/batch/admit', {
         candidates,
         admissionYear,
         defaultMentorId,
       });
-      Alert.alert('Admissions Enrolled', res.data?.message || 'Candidates enrolled.');
+      Alert.alert(
+        'Admissions Enrolled',
+        res.data?.message || 'Candidates enrolled.'
+      );
       await get().syncFromDatabase('admin');
     } catch (error: any) {
       const msg = error.response?.data?.error || error.message;
@@ -530,8 +623,14 @@ export const useDataContext = create<DataState>((set, get) => ({
 
   assignOfficialUsn: async (studentId, officialUsn) => {
     try {
-      const res = await apiClient.put(`/admin/students/${studentId}/assign-usn`, { officialUsn });
-      Alert.alert('USN Assigned', res.data?.message || `Official USN assigned: ${officialUsn}`);
+      const res = await apiClient.put(
+        `/admin/students/${studentId}/assign-usn`,
+        { officialUsn }
+      );
+      Alert.alert(
+        'USN Assigned',
+        res.data?.message || `Official USN assigned: ${officialUsn}`
+      );
       await get().syncFromDatabase('admin');
     } catch (error: any) {
       const msg = error.response?.data?.error || error.message;
@@ -549,21 +648,25 @@ export const useDataContext = create<DataState>((set, get) => ({
     totalClasses,
   }) => {
     const normalizedM = Number(((marksObtained / totalMarks) * 10).toFixed(2));
-    const normalizedA = Number(((attendedClasses / totalClasses) * 10).toFixed(2));
-    const computedTotal = Number((0.6 * normalizedM + 0.4 * normalizedA).toFixed(2));
-
+    const normalizedA = Number(
+      ((attendedClasses / totalClasses) * 10).toFixed(2)
+    );
+    const computedTotal = Number(
+      (0.6 * normalizedM + 0.4 * normalizedA).toFixed(2)
+    );
     try {
-      const res = await apiClient.post(`/mentor/mentees/${studentId}/evaluation`, {
-        term,
-        marks: normalizedM,
-        attendance: normalizedA,
-        rawMarks: { obtained: marksObtained, total: totalMarks },
-        rawAttendance: { attended: attendedClasses, total: totalClasses },
-      });
-
+      const res = await apiClient.post(
+        `/mentor/mentees/${studentId}/evaluation`,
+        {
+          term,
+          marks: normalizedM,
+          attendance: normalizedA,
+          rawMarks: { obtained: marksObtained, total: totalMarks },
+          rawAttendance: { attended: attendedClasses, total: totalClasses },
+        }
+      );
       const serverStudent = res.data?.student;
       const serverHistory = serverStudent?.history;
-
       set((state) => ({
         students: state.students.map((s) => {
           if (s.id.toLowerCase() !== studentId.toLowerCase()) return s;
@@ -589,7 +692,10 @@ export const useDataContext = create<DataState>((set, get) => ({
       const res = await apiClient.put('/admin/config', merged);
       set({ config: res.data?.config || res.data || merged });
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to save config');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to save config'
+      );
     }
   },
 
@@ -597,10 +703,15 @@ export const useDataContext = create<DataState>((set, get) => ({
     try {
       await apiClient.put(`/mentor/mentees/${studentId}/remarks`, { remarks });
       set((state) => ({
-        students: state.students.map((s) => (s.id === studentId ? { ...s, remarks } : s)),
+        students: state.students.map((s) =>
+          s.id === studentId ? { ...s, remarks } : s
+        ),
       }));
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to update remarks');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to update remarks'
+      );
     }
   },
 
@@ -610,7 +721,10 @@ export const useDataContext = create<DataState>((set, get) => ({
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const d = res.data?.document || res.data?.doc || res.data;
-      const serverBase = (apiClient.defaults.baseURL || '').replace('/api/v1', '');
+      const serverBase = (apiClient.defaults.baseURL || '').replace(
+        '/api/v1',
+        ''
+      );
       const rawUrl = d.fileUrl || '';
       const newDoc: any = {
         id: d._id || d.id,
@@ -639,73 +753,169 @@ export const useDataContext = create<DataState>((set, get) => ({
       };
       set((state) => ({ documents: [newDoc, ...state.documents] }));
     } catch (error: any) {
-      Alert.alert('Upload Error', error.response?.data?.error || 'Failed to save document');
+      Alert.alert(
+        'Upload Error',
+        error.response?.data?.error || 'Failed to save document'
+      );
     }
   },
 
   deleteDocument: async (docId) => {
     try {
       await apiClient.delete(`/student/documents/${docId}`);
-      set((state) => ({ documents: state.documents.filter((d) => d.id !== docId) }));
+      set((state) => ({
+        documents: state.documents.filter((d) => d.id !== docId),
+      }));
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to delete document');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to delete document'
+      );
     }
   },
 
   toggleDocVerify: async (docId) => {
     try {
       const res = await apiClient.put(`/mentor/documents/${docId}/verify`);
-      const updatedVerified = res.data?.doc?.verified ?? res.data?.verified ?? true;
+      const updatedVerified =
+        res.data?.doc?.verified ?? res.data?.verified ?? true;
       set((state) => ({
         documents: state.documents.map((d) =>
           d.id === docId ? { ...d, verified: updatedVerified } : d
         ),
       }));
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to update verification');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to update verification'
+      );
     }
   },
 
-  addTask: async (taskPayload) => {
-    try {
-      const formattedTitle = taskPayload.description?.trim()
-        ? `${taskPayload.title.trim()} — ${taskPayload.description.trim()}`
-        : taskPayload.title.trim();
+  // addTask: async (taskPayload) => {
+  //   try {
+  //     const formData = new FormData();
+  //     formData.append('studentId', taskPayload.studentId);
+  //     formData.append('title', taskPayload.title.trim());
+  //     formData.append('description', taskPayload.description?.trim() || '');
+  //     formData.append('priority', taskPayload.priority || 'Medium');
+  //     formData.append('dueDate', taskPayload.dueDate || 'Next Session');
 
-      const res = await apiClient.post('/mentor/tasks', {
-        ...taskPayload,
-        title: formattedTitle,
-        description: taskPayload.description?.trim() || '',
-      });
+  //     const mentorId = String(
+  //       useAuthStore.getState().user?.identifier || ''
+  //     ).trim();
+  //     if (mentorId) formData.append('mentorId', mentorId);
+
+  //     if (taskPayload.file) {
+  //       formData.append('file', {
+  //         uri: taskPayload.file.uri,
+  //         name: taskPayload.file.name || `reference_${Date.now()}.pdf`,
+  //         type: taskPayload.file.mimeType || 'application/pdf',
+  //       } as any);
+  //     }
+
+  //     const res = await apiClient.post('/mentor/tasks', formData, {
+  //       headers: { 'Content-Type': 'multipart/form-data' },
+  //     });
+
+  //     const data = res.data;
+  //     if (Array.isArray(data?.tasks)) {
+  //       const createdBatch = data.tasks.map(mapTaskRecord);
+  //       set((state) => ({ tasks: [...createdBatch, ...state.tasks] }));
+  //     } else {
+  //       const t = data?.task || data;
+  //       set((state) => ({ tasks: [mapTaskRecord(t), ...state.tasks] }));
+  //     }
+  //   } catch (error: any) {
+  //     const errorMsg =
+  //       error.response?.data?.error || error.message || 'Failed to dispatch task';
+  //     Alert.alert('Task Error', errorMsg);
+  //     throw new Error(errorMsg);
+  //   }
+  // },
+addTask: async (taskPayload) => {
+    try {
+      const mentorId = String(
+        useAuthStore.getState().user?.identifier || ''
+      ).trim();
+
+      let res;
+      if (taskPayload.file) {
+        const formData = new FormData();
+        formData.append('studentId', taskPayload.studentId);
+        formData.append('title', taskPayload.title.trim());
+        formData.append('description', taskPayload.description?.trim() || '');
+        formData.append('priority', taskPayload.priority || 'Medium');
+        formData.append('dueDate', taskPayload.dueDate || 'Next Session');
+        if (mentorId) formData.append('mentorId', mentorId);
+
+        formData.append('file', {
+          uri: taskPayload.file.uri,
+          name: taskPayload.file.name || `reference_${Date.now()}.pdf`,
+          type: taskPayload.file.mimeType || 'application/pdf',
+        } as any);
+
+        res = await apiClient.post('/mentor/tasks', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        res = await apiClient.post('/mentor/tasks', {
+          studentId: taskPayload.studentId,
+          title: taskPayload.title.trim(),
+          description: taskPayload.description?.trim() || '',
+          priority: taskPayload.priority || 'Medium',
+          dueDate: taskPayload.dueDate || 'Next Session',
+          mentorId,
+        });
+      }
 
       const data = res.data;
       if (Array.isArray(data?.tasks)) {
-        const createdBatch: IActionTask[] = data.tasks.map((t: any) => ({
-          id: t._id || t.id,
-          studentId: t.studentId,
-          title: t.title,
-          priority: t.priority || 'Medium',
-          dueDate: t.dueDate || 'Next Session',
-          status: t.status || 'Pending',
-        }));
+        const createdBatch = data.tasks.map(mapTaskRecord);
         set((state) => ({ tasks: [...createdBatch, ...state.tasks] }));
       } else {
         const t = data?.task || data;
-        const newTask: IActionTask = {
-          id: t._id || t.id,
-          studentId: t.studentId || taskPayload.studentId,
-          title: t.title || formattedTitle,
-          priority: t.priority || taskPayload.priority || 'Medium',
-          dueDate: t.dueDate || taskPayload.dueDate || 'Next Session',
-          status: t.status || 'Pending',
-        };
-        set((state) => ({ tasks: [newTask, ...state.tasks] }));
+        set((state) => ({ tasks: [mapTaskRecord(t), ...state.tasks] }));
       }
     } catch (error: any) {
       const errorMsg =
         error.response?.data?.error || error.message || 'Failed to dispatch task';
       Alert.alert('Task Error', errorMsg);
-      throw new Error(errorMsg);
+    }
+  },
+  submitTaskProof: async (taskId, { remarks, file }) => {
+    try {
+      const formData = new FormData();
+      formData.append('remarks', remarks?.trim() || '');
+      if (file) {
+        formData.append('file', {
+          uri: file.uri,
+          name: file.name || `proof_${Date.now()}.pdf`,
+          type: file.mimeType || 'application/pdf',
+        } as any);
+      }
+
+      const res = await apiClient.post(
+        `/student/tasks/${taskId}/submit`,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }
+      );
+
+      const updated = res.data?.task ? mapTaskRecord(res.data.task) : null;
+      if (updated) {
+        set((state) => ({
+          tasks: state.tasks.map((t) => (t.id === taskId ? updated : t)),
+        }));
+      }
+    } catch (error: any) {
+      const msg =
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to submit proof';
+      Alert.alert('Submission Error', msg);
+      throw new Error(msg);
     }
   },
 
@@ -715,7 +925,6 @@ export const useDataContext = create<DataState>((set, get) => ({
       String(currentTask?.status || '').toLowerCase() === 'completed';
     const nextStatus = isCurrentlyCompleted ? 'Pending' : 'Completed';
 
-    // Immediate UI update across Mentor & Student screens
     set((state) => ({
       tasks: state.tasks.map((t) =>
         t.id === taskId ? { ...t, status: nextStatus } : t
@@ -738,7 +947,7 @@ export const useDataContext = create<DataState>((set, get) => ({
       try {
         await apiClient.put(`/mentor/tasks/${taskId}`, { status: nextStatus });
       } catch {
-        // Optimistic status retained so Completed/Pending state never reverts
+        // Optimistic status retained
       }
     }
   },
@@ -748,13 +957,19 @@ export const useDataContext = create<DataState>((set, get) => ({
       await apiClient.delete(`/mentor/tasks/${taskId}`);
       set((state) => ({ tasks: state.tasks.filter((t) => t.id !== taskId) }));
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to delete task');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to delete task'
+      );
     }
   },
 
   addQuery: async ({ subject, message }) => {
     try {
-      const res = await apiClient.post('/student/inquiries', { subject, message });
+      const res = await apiClient.post('/student/inquiries', {
+        subject,
+        message,
+      });
       const q = res.data?.query || res.data;
       const newQuery: IGuidanceQuery = {
         id: q._id || q.id,
@@ -766,33 +981,46 @@ export const useDataContext = create<DataState>((set, get) => ({
       };
       set((state) => ({ queries: [newQuery, ...state.queries] }));
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to dispatch inquiry');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to dispatch inquiry'
+      );
     }
   },
 
   replyQuery: async (queryId, reply) => {
     try {
-      await apiClient.put(`/mentor/inquiries/${queryId}/reply`, { response: reply });
+      await apiClient.put(`/mentor/inquiries/${queryId}/reply`, {
+        response: reply,
+      });
       set((state) => ({
         queries: state.queries.map((q) =>
           q.id === queryId ? { ...q, response: reply, status: 'Answered' } : q
         ),
       }));
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to save response');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to save response'
+      );
     }
   },
 
   deleteQuery: async (queryId) => {
     try {
       await apiClient.delete(`/mentor/inquiries/${queryId}`);
-      set((state) => ({ queries: state.queries.filter((q) => q.id !== queryId) }));
+      set((state) => ({
+        queries: state.queries.filter((q) => q.id !== queryId),
+      }));
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to dismiss inquiry');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to dismiss inquiry'
+      );
     }
   },
 
-approveRegistration: async (userId, mentorId = '', admissionYear) => {
+  approveRegistration: async (userId, mentorId = '', admissionYear) => {
     try {
       await apiClient.put(`/admin/approvals/${userId}/approve`, {
         mentorId: mentorId || '',
@@ -810,10 +1038,15 @@ approveRegistration: async (userId, mentorId = '', admissionYear) => {
     try {
       await apiClient.delete(`/admin/approvals/${userId}/reject`);
       set((state) => ({
-        pendingRegistrations: state.pendingRegistrations.filter((r) => r.id !== userId),
+        pendingRegistrations: state.pendingRegistrations.filter(
+          (r) => r.id !== userId
+        ),
       }));
     } catch (error: any) {
-      Alert.alert('DB Error', error.response?.data?.error || 'Failed to reject registration');
+      Alert.alert(
+        'DB Error',
+        error.response?.data?.error || 'Failed to reject registration'
+      );
     }
   },
 }));
