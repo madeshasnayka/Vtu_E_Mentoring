@@ -4,6 +4,11 @@ import TaskModel from '../models/Task.model';
 import DocumentModel from '../models/Document.model';
 import QueryModel from '../models/Query.model';
 import UserModel from '../models/User.model';
+import {
+  uploadBufferToImageKit,
+  deleteFromImageKit,
+} from '../services/imagekit.service';
+import { formatBytes } from '../middlewares/upload.middleware';
 
 const Student: any = (StudentModel as any)?.default || StudentModel;
 const Task: any = (TaskModel as any)?.default || TaskModel;
@@ -13,7 +18,6 @@ const User: any = (UserModel as any)?.default || UserModel;
 
 const getMentorQueryFilter = async (req: Request) => {
   let mentorId = req.query.mentorId ? String(req.query.mentorId).trim() : '';
-
   if (!mentorId && (req as any).user) {
     mentorId = String(
       (req as any).user.identifier || (req as any).user.id || ''
@@ -81,11 +85,14 @@ export const recordEvaluation = async (req: Request, res: Response) => {
       ? rawStudentId[0]
       : rawStudentId;
     const { term, marks, attendance, rawMarks, rawAttendance } = req.body;
+
     if (!studentId || !term || marks === undefined || attendance === undefined) {
       return res.status(400).json({ error: 'Missing evaluation parameters.' });
     }
+
     const cleanStudentId = studentId ? String(studentId).trim() : '';
     const isValidMongoId = /^[0-9a-fA-F]{24}$/.test(cleanStudentId);
+
     const student = await Student.findOne({
       $or: [
         { usn: cleanStudentId },
@@ -93,12 +100,15 @@ export const recordEvaluation = async (req: Request, res: Response) => {
         ...(isValidMongoId ? [{ _id: cleanStudentId }] : []),
       ],
     });
+
     if (!student) {
       return res.status(404).json({ error: 'Scholar record not found.' });
     }
+
     if (!Array.isArray(student.history)) {
       student.history = [];
     }
+
     const existingIndex = student.history.findIndex((h: any) => h.term === term);
     const historyEntry = {
       term,
@@ -108,11 +118,13 @@ export const recordEvaluation = async (req: Request, res: Response) => {
       rawAttendance: rawAttendance || { attended: attendance, total: 10 },
       date: new Date(),
     };
+
     if (existingIndex >= 0) {
       student.history[existingIndex] = historyEntry;
     } else {
       student.history.push(historyEntry);
     }
+
     student.currentMarks = Number(marks);
     student.currentAttendance = Number(attendance);
     student.dynamicTotal = Number(
@@ -126,9 +138,11 @@ export const recordEvaluation = async (req: Request, res: Response) => {
     } else {
       student.riskLevel = 'Satisfactory';
     }
+
     if (!student.email) {
       student.email = `${String(student.usn).toLowerCase()}@vtu.ac.in`;
     }
+
     await student.save();
     return res.status(200).json({
       message: `Evaluation recorded successfully for Term ${term}.`,
@@ -152,14 +166,17 @@ export const updateRemarks = async (req: Request, res: Response) => {
       ? rawStudentId[0]
       : rawStudentId;
     const { remarks } = req.body;
+
     const student = await Student.findOneAndUpdate(
       { $or: [{ usn: studentId }, { tempAdmissionNo: studentId }] },
       { $set: { remarks: remarks || '' } },
       { new: true, runValidators: false }
     );
+
     if (!student) {
       return res.status(404).json({ error: 'Scholar not found.' });
     }
+
     return res
       .status(200)
       .json({ message: 'Counseling remarks updated successfully.', student });
@@ -262,8 +279,10 @@ export const verifyDocument = async (req: Request, res: Response) => {
     const docId = Array.isArray(rawDocId) ? rawDocId[0] : rawDocId;
     const doc = await Document.findById(docId);
     if (!doc) return res.status(404).json({ error: 'Document not found.' });
+
     doc.verified = !doc.verified;
     await doc.save();
+
     return res
       .status(200)
       .json({ message: 'Document verification status toggled.', doc });
@@ -312,6 +331,7 @@ export const getMentorTasks = async (req: Request, res: Response) => {
     const studentIds = (mentees || [])
       .flatMap((s: any) => [s.usn, s.tempAdmissionNo])
       .filter(Boolean);
+
     const tasks = await Task.find({
       $or: [
         { studentId: { $in: studentIds } },
@@ -320,6 +340,7 @@ export const getMentorTasks = async (req: Request, res: Response) => {
     })
       .sort({ createdAt: -1 })
       .lean();
+
     return res.status(200).json(tasks || []);
   } catch (error: any) {
     console.error('[Mentor getMentorTasks Error]:', error.message);
@@ -330,23 +351,51 @@ export const getMentorTasks = async (req: Request, res: Response) => {
 };
 
 // ============================================================================
-// 7. CREATE ACTION TASK FOR MENTEE
+// 7. CREATE ACTION TASK FOR MENTEE (Supports optional PDF/Image reference)
 // ============================================================================
 export const createTask = async (req: Request, res: Response) => {
   try {
-    const { studentId, title, priority, dueDate } = req.body;
+    const { studentId, title, description, priority, dueDate, mentorId } =
+      req.body;
     if (!studentId || !title) {
       return res
         .status(400)
         .json({ error: 'Student ID and Task Title are required.' });
     }
+
+    let referenceFile = null;
+    if (req.file && req.file.buffer) {
+      const uploaded = await uploadBufferToImageKit(
+        req.file.buffer,
+        req.file.originalname,
+        '/vtu-mentoring-tasks'
+      );
+      referenceFile = {
+        fileName: req.file.originalname,
+        fileUrl: uploaded.url,
+        fileId: uploaded.fileId,
+        mimeType: req.file.mimetype || 'application/pdf',
+        fileSize: formatBytes(uploaded.size || req.file.size),
+      };
+    }
+
+    const resolvedMentorId =
+      mentorId ||
+      (req as any).user?.identifier ||
+      (req as any).user?.id ||
+      '';
+
     const newTask = await Task.create({
       studentId: String(studentId).trim(),
+      mentorId: String(resolvedMentorId).trim(),
       title: String(title).trim(),
+      description: description ? String(description).trim() : '',
       priority: priority || 'Medium',
       dueDate: dueDate || 'Next Session',
       status: 'Pending',
+      referenceFile,
     });
+
     return res
       .status(201)
       .json({ message: 'Remedial task assigned successfully.', task: newTask });
@@ -359,13 +408,42 @@ export const createTask = async (req: Request, res: Response) => {
 };
 
 // ============================================================================
-// 8. DELETE TASK
+// 8. UPDATE TASK STATUS & DELETE TASK (Cleans up ImageKit files)
 // ============================================================================
+export const updateTaskStatus = async (req: Request, res: Response) => {
+  try {
+    const rawTaskId = req.params.taskId;
+    const taskId = Array.isArray(rawTaskId) ? rawTaskId[0] : rawTaskId;
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found.' });
+    }
+    const requestedStatus = req.body?.status;
+    task.status =
+      requestedStatus || (task.status === 'Completed' ? 'Pending' : 'Completed');
+    await task.save();
+    return res.status(200).json({ message: 'Task status updated.', task });
+  } catch (error: any) {
+    console.error('[Mentor updateTaskStatus Error]:', error.message);
+    return res
+      .status(500)
+      .json({ error: `Failed to update task status: ${error.message}` });
+  }
+};
+
 export const deleteTask = async (req: Request, res: Response) => {
   try {
     const rawTaskId = req.params.taskId;
     const taskId = Array.isArray(rawTaskId) ? rawTaskId[0] : rawTaskId;
-    await Task.findByIdAndDelete(taskId);
+    const existing = await Task.findByIdAndDelete(taskId);
+    if (existing) {
+      if (existing.referenceFile?.fileId) {
+        await deleteFromImageKit(existing.referenceFile.fileId);
+      }
+      if (existing.submission?.fileId) {
+        await deleteFromImageKit(existing.submission.fileId);
+      }
+    }
     return res.status(200).json({ message: 'Task removed successfully.' });
   } catch (error: any) {
     console.error('[Mentor deleteTask Error]:', error.message);
@@ -388,6 +466,7 @@ export const getMentorInquiries = async (req: Request, res: Response) => {
     const studentIds = (mentees || [])
       .flatMap((s: any) => [s.usn, s.tempAdmissionNo])
       .filter(Boolean);
+
     const queries = await Inquiry.find({
       $or: [
         { studentId: { $in: studentIds } },
@@ -396,6 +475,7 @@ export const getMentorInquiries = async (req: Request, res: Response) => {
     })
       .sort({ createdAt: -1 })
       .lean();
+
     return res.status(200).json(queries || []);
   } catch (error: any) {
     console.error('[Mentor getMentorInquiries Error]:', error.message);
@@ -413,11 +493,14 @@ export const replyInquiry = async (req: Request, res: Response) => {
     const rawQueryId = req.params.queryId;
     const queryId = Array.isArray(rawQueryId) ? rawQueryId[0] : rawQueryId;
     const { response } = req.body;
+
     const queryDoc = await Inquiry.findById(queryId);
     if (!queryDoc) return res.status(404).json({ error: 'Inquiry not found.' });
+
     queryDoc.response = response || '';
     queryDoc.status = 'Answered';
     await queryDoc.save();
+
     return res
       .status(200)
       .json({ message: 'Mentor response dispatched.', query: queryDoc });

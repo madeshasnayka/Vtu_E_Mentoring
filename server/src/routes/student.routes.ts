@@ -11,6 +11,8 @@ import {
   getStudentDocuments,
   removeDocument,
 } from '../controllers/document.controller';
+import { uploadBufferToImageKit } from '../services/imagekit.service';
+import { formatBytes } from '../middlewares/upload.middleware';
 
 const Student: any = (StudentModel as any)?.default || StudentModel;
 const User: any = (UserModel as any)?.default || UserModel;
@@ -193,7 +195,7 @@ router.post('/dossier/:studentId/upload', async (req: Request, res: Response) =>
 });
 
 // ============================================================================
-// 4. STUDENT ASSIGNED ACTION TASKS (NO STUDENT REVOKE ONCE COMPLETED)
+// 4. STUDENT ASSIGNED ACTION TASKS & PROOF UPLOAD
 // ============================================================================
 router.get('/tasks', async (req: Request, res: Response) => {
   try {
@@ -226,6 +228,56 @@ router.put('/tasks/:taskId/toggle', async (req: Request, res: Response) => {
     return res.status(500).json({ error: error.message });
   }
 });
+
+router.post(
+  '/tasks/:taskId/submit',
+  memoryUpload.single('file'),
+  async (req: Request, res: Response) => {
+    try {
+      const { taskId } = req.params;
+      const task = await Task.findById(taskId);
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found.' });
+      }
+
+      const remarks = req.body?.remarks ? String(req.body.remarks).trim() : '';
+      let submissionPayload: any = {
+        remarks,
+        submittedAt: new Date(),
+      };
+
+      if (req.file && req.file.buffer) {
+        const uploaded = await uploadBufferToImageKit(
+          req.file.buffer,
+          req.file.originalname,
+          '/vtu-mentoring-task-proofs'
+        );
+        submissionPayload = {
+          ...submissionPayload,
+          fileName: req.file.originalname,
+          fileUrl: uploaded.url,
+          fileId: uploaded.fileId,
+          mimeType: req.file.mimetype || 'application/pdf',
+          fileSize: formatBytes(uploaded.size || req.file.size),
+        };
+      }
+
+      task.submission = submissionPayload;
+      task.status = 'Completed';
+      await task.save();
+
+      return res.status(200).json({
+        message: 'Task proof submitted and marked completed.',
+        task,
+      });
+    } catch (error: any) {
+      console.error('[Student Submit Task Proof Error]:', error.message);
+      return res
+        .status(500)
+        .json({ error: `Failed to submit task proof: ${error.message}` });
+    }
+  }
+);
 
 // ============================================================================
 // 5. STUDENT GUIDANCE INQUIRIES

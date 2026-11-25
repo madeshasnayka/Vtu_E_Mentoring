@@ -8,11 +8,13 @@ import {
   deleteMentorDocument,
   getMentorTasks,
   createTask,
+  updateTaskStatus,
   deleteTask,
   getMentorInquiries,
   replyInquiry,
   deleteInquiry,
 } from '../controllers/mentor.controller';
+import { taskMemoryUpload } from '../middlewares/upload.middleware';
 
 const router = Router();
 
@@ -26,9 +28,10 @@ router.get('/documents', getMentorDocuments);
 router.put('/documents/:docId/verify', verifyDocument);
 router.delete('/documents/:docId', deleteMentorDocument);
 
-// Remedial Tasks Desk
+// Remedial Tasks Desk (Supports optional PDF/Image attachment)
 router.get('/tasks', getMentorTasks);
-router.post('/tasks', createTask);
+router.post('/tasks', taskMemoryUpload.single('file'), createTask);
+router.put('/tasks/:taskId', updateTaskStatus);
 router.delete('/tasks/:taskId', deleteTask);
 
 // Student Inquiries / Guidance Queries
