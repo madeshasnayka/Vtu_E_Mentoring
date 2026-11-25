@@ -8,13 +8,18 @@ import SystemConfigModel from '../models/SystemConfig.model';
 
 const User: any = (UserModel as any)?.default || UserModel;
 const Student: any = (StudentModel as any)?.default || StudentModel;
-const SystemConfig: any = (SystemConfigModel as any)?.default || SystemConfigModel;
+const SystemConfig: any =
+  (SystemConfigModel as any)?.default || SystemConfigModel;
 
-const JWT_SECRET = process.env.JWT_SECRET || 'vtu_mentorship_jwt_secret_key_2026';
+const JWT_SECRET =
+  process.env.JWT_SECRET || 'vtu_mentorship_jwt_secret_key_2026';
 const FACULTY_MENTOR_IDS = new Set(['0001', '1', '1302', '0003', '0002']);
 
+const escapeRegex = (val: string) =>
+  val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // ============================================================================
-// 1. LOGIN (Strict Password Verification — Preserves Self-Registered Passwords)
+// 1. LOGIN (Supports USN/ID & Registered Email — Preserves Passwords)
 // ============================================================================
 export const login = async (req: Request, res: Response) => {
   try {
@@ -26,6 +31,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const cleanId = String(identifier).trim();
+    const escapedId = escapeRegex(cleanId);
     console.log(`[Auth Login Attempt] Identifier: "${cleanId}"`);
 
     const dbState = mongoose.connection.readyState;
@@ -43,8 +49,8 @@ export const login = async (req: Request, res: Response) => {
 
     let user = await User.findOne({
       $or: [
-        { identifier: { $regex: `^${cleanId}$`, $options: 'i' } },
-        { email: { $regex: `^${cleanId}$`, $options: 'i' } },
+        { identifier: { $regex: `^${escapedId}$`, $options: 'i' } },
+        { email: { $regex: `^${escapedId}$`, $options: 'i' } },
       ],
     }).select('+password +passwordHash');
 
@@ -52,25 +58,33 @@ export const login = async (req: Request, res: Response) => {
       const isDefaultAdmin =
         cleanId.toUpperCase() === 'ADMIN-01' ||
         cleanId.toLowerCase() === 'admin@vtu.ac.in';
-      const isDefaultMentor = cleanId === '0001' || cleanId === '1';
+      const isDefaultMentor =
+        cleanId === '0001' ||
+        cleanId === '1' ||
+        cleanId.toLowerCase() === 'kumar.pk@vtu.ac.in' ||
+        cleanId.toLowerCase() === 'maddy@vtu.ac.in';
 
       if (isDefaultAdmin || isDefaultMentor) {
+        const isKumar =
+          cleanId === '0001' || cleanId.toLowerCase() === 'kumar.pk@vtu.ac.in';
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(String(password), salt);
         user = await User.create({
-          identifier: isDefaultAdmin ? 'ADMIN-01' : cleanId,
+          identifier: isDefaultAdmin ? 'ADMIN-01' : isKumar ? '0001' : '1',
           name: isDefaultAdmin
             ? 'Department Administrator'
-            : cleanId === '0001'
+            : isKumar
             ? 'Dr. Kumar P K'
             : 'Maddy',
           email: isDefaultAdmin
             ? 'admin@vtu.ac.in'
-            : cleanId === '0001'
+            : isKumar
             ? 'kumar.pk@vtu.ac.in'
             : 'maddy@vtu.ac.in',
           role: isDefaultAdmin ? 'admin' : 'mentor',
-          designation: isDefaultAdmin ? 'Academic Administrator' : 'Faculty Mentor',
+          designation: isDefaultAdmin
+            ? 'Academic Administrator'
+            : 'Faculty Mentor',
           password: hashedPassword,
           passwordHash: hashedPassword,
           isApproved: true,
@@ -82,7 +96,10 @@ export const login = async (req: Request, res: Response) => {
       }
     }
 
-    if (user.identifier.toUpperCase() === 'ADMIN-01' || user.email?.includes('admin')) {
+    if (
+      user.identifier.toUpperCase() === 'ADMIN-01' ||
+      user.email?.includes('admin')
+    ) {
       user.role = 'admin';
       user.isApproved = true;
     } else if (
@@ -175,7 +192,8 @@ export const login = async (req: Request, res: Response) => {
 // ============================================================================
 export const register = async (req: Request, res: Response) => {
   try {
-    const { name, email, identifier, phone, password, admissionYear } = req.body;
+    const { name, email, identifier, phone, password, admissionYear } =
+      req.body;
     if (!name || !email || !password) {
       return res
         .status(400)
@@ -192,9 +210,12 @@ export const register = async (req: Request, res: Response) => {
     const existingUser = await User.findOne({
       $or: [
         { email: cleanEmail },
-        ...(identifier ? [{ identifier: String(identifier).trim().toUpperCase() }] : []),
+        ...(identifier
+          ? [{ identifier: String(identifier).trim().toUpperCase() }]
+          : []),
       ],
     });
+
     if (existingUser) {
       return res.status(409).json({
         error:
@@ -205,7 +226,9 @@ export const register = async (req: Request, res: Response) => {
     const studentRecord = await Student.findOne({
       $or: [
         { email: cleanEmail },
-        ...(identifier ? [{ usn: String(identifier).trim().toUpperCase() }] : []),
+        ...(identifier
+          ? [{ usn: String(identifier).trim().toUpperCase() }]
+          : []),
       ],
     });
 
