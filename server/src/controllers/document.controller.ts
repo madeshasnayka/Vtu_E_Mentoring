@@ -75,6 +75,7 @@ export const uploadStudentDocument = async (req: Request, res: Response) => {
       fileUrl: cloudAsset.url,
       imagekitFileId: cloudAsset.fileId,
       verified: false,
+      hiddenByStudent: false,
       date: new Date().toISOString().split('T')[0],
     });
 
@@ -91,7 +92,7 @@ export const uploadStudentDocument = async (req: Request, res: Response) => {
 };
 
 // ============================================================================
-// 2. LIST DOCUMENTS
+// 2. LIST STUDENT DOCUMENTS (Excludes Verified Docs Cleared by Student)
 // ============================================================================
 export const getStudentDocuments = async (req: Request, res: Response) => {
   try {
@@ -101,7 +102,11 @@ export const getStudentDocuments = async (req: Request, res: Response) => {
       .trim()
       .toUpperCase();
 
-    const filter = studentId ? { studentId } : {};
+    const filter: any = { hiddenByStudent: { $ne: true } };
+    if (studentId) {
+      filter.studentId = studentId;
+    }
+
     const docs = await DocModel.find(filter).sort({ createdAt: -1 }).lean();
     return res.status(200).json(docs);
   } catch (error: any) {
@@ -112,7 +117,10 @@ export const getStudentDocuments = async (req: Request, res: Response) => {
 // ============================================================================
 // 3. MENTOR VERIFY / REVOKE DOCUMENT
 // ============================================================================
-export const toggleDocumentVerification = async (req: Request, res: Response) => {
+export const toggleDocumentVerification = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const { docId } = req.params;
     const doc = await DocModel.findById(docId);
@@ -128,18 +136,38 @@ export const toggleDocumentVerification = async (req: Request, res: Response) =>
 };
 
 // ============================================================================
-// 4. DELETE DOCUMENT (REMOVES FROM MONGODB & IMAGEKIT CLOUD)
+// 4. REMOVE DOCUMENT (Soft-Hides Verified Docs; Permanently Deletes Unverified)
 // ============================================================================
 export const removeDocument = async (req: Request, res: Response) => {
   try {
     const { docId } = req.params;
-    const doc = await DocModel.findByIdAndDelete(docId);
-    if (doc?.imagekitFileId) {
+    const doc = await DocModel.findById(docId);
+
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found.' });
+    }
+
+    // If verified by the mentor, only hide from student view — keep in Mentor Archive & ImageKit
+    if (doc.verified) {
+      doc.hiddenByStudent = true;
+      await doc.save();
+      return res.status(200).json({
+        message:
+          'Verified document cleared from your view. Official copy remains in the Mentor Archive.',
+        hidden: true,
+      });
+    }
+
+    // If unverified, permanently delete from MongoDB & ImageKit Cloud
+    await DocModel.findByIdAndDelete(docId);
+    if (doc.imagekitFileId) {
       await deleteFromImageKit(doc.imagekitFileId);
     }
-    return res
-      .status(200)
-      .json({ message: 'Document permanently removed from cloud & database.' });
+
+    return res.status(200).json({
+      message: 'Document permanently removed from cloud & database.',
+      hidden: false,
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

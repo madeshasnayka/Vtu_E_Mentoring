@@ -14,6 +14,7 @@ export interface IDocument extends Document {
   fileUrl: string;
   imagekitFileId?: string;
   verified: boolean;
+  hiddenByStudent?: boolean;
   date: string;
 }
 
@@ -32,6 +33,7 @@ const DocumentSchema = new Schema<IDocument>(
     fileUrl: { type: String, default: '' },
     imagekitFileId: { type: String, default: '' },
     verified: { type: Boolean, default: false },
+    hiddenByStudent: { type: Boolean, default: false },
     date: { type: String, default: () => new Date().toISOString().split('T')[0] },
   },
   { timestamps: true }
@@ -39,4 +41,5 @@ const DocumentSchema = new Schema<IDocument>(
 
 export const DocumentModel =
   mongoose.models.Document || mongoose.model<IDocument>('Document', DocumentSchema);
+
 export default DocumentModel;
